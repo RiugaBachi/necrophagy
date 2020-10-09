@@ -3,8 +3,8 @@ name:                necrophagy
 version:             0.1.0.0
 synopsis:            A type-level Haskell EDSL for programming guitar tablature.
 description:         A type-level Haskell EDSL for programming guitar tablature.
-homepage:            https://github.com/Riuga/necrophagy
-bug-reports:         https://github.com/Riuga/necropagy/issues
+homepage:            https://github.com/RiugaBachi/necrophagy
+bug-reports:         https://github.com/RiugaBachi/necropagy/issues
 license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Riuga
@@ -18,10 +18,10 @@ tested-with:         GHC == 8.8.3
 
 source-repository head
   type:                git
-  location:            https://github.com/Riuga/necrophagy.git
+  location:            https://github.com/RiugaBachi/necrophagy.git
 
 common common-options
-  build-depends:       base ^>= 4.13.0.0,
+  build-depends:       base >= 4.13 && < 5,
   default-language:    Haskell2010
 
 library
@@ -36,7 +36,10 @@ library
     NoMonomorphismRestriction PartialTypeSignatures
 
   build-depends:       text,
-                       midi
+                       midi,
+                       Euterpea
+                       
+  allow-newer:         True
 
   ghc-options:         -Wall
                        -Wno-unused-do-bind
