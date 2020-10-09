@@ -74,6 +74,7 @@ module Necrophagy (
   -- ** Fractions
   Gcd, Simplified,
   -- * Re-exports
+  Nat,
   (>>), ($), undefined, mempty,
   fromString,
   Instrument(..)
