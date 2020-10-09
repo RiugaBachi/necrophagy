@@ -63,7 +63,7 @@ myTab = Tablature tabMeta tracks
     tracks = TrackList @Flexible
       [ Track 
           { trackName    = "Player - Instrument"
-          , trackProgram = DistortitionGuitar `Tuned` EStandard6
+          , trackProgram = DistortionGuitar `Tuned` EStandard6
           , trackBody    = myTrack
           }
       ]
