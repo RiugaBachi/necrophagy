@@ -176,6 +176,34 @@ Four stock bend curves are provided for common use cases:
 
 The parameter `f` denotes a fraction standing in for the maximum `s` value of the vertices in the curve.
 
+### Programs & Tunings
+
+A 'program' in the context of Necrophagy refers to a tuned instrument, as per MIDI terminology. Programs are constructed via the `Tuned :: Instrument -> p -> Program p` constructor, where `Instrument` is any valid MIDI instrument (re-exported from the `midi` package).
+
+`p` refers to a tuning name. All tuning names have the kind `Nat -> Type`; in other words, they are parameterized over a string count. Each _specialized_ tuning name against a string count may have a `Tuning` instance, which is a poly-kinded list of notes, each specialized to a particular octave number. Notes are defined by the following lifted data declaration:
+
+```hs
+data Note (n :: Nat)
+  = Ab | A | Bb | B | C | Db | D | Eb | E | F | Gb | G  
+```
+
+
+As an example, the following is the definition of the provided `EStandard` tuning name and `EStandard 6` tuning instance:
+
+```hs
+data EStandard (n :: Nat) = EStandard
+
+type instance Tuning (EStandard 6)
+  = 'E @2
+  > 'A @3
+  > 'D @3
+  > 'G @3
+  > 'B @4
+  > 'E @4
+```
+
+`necrophagy` exports and re-exports all the types you need to create your own tunings, or extend existing tuning names to other string counts, in a similar fashion.
+
 ## Credits 
 
 The core of this library was largely written over the course of a single day with some minor follow-up additions in terms of dynamics modifiers, better type errors, et cetera. In closing I would like to pay homage to Necrophagist, '92 - '09, for supplying me with some nostalgic tunes to work against while getting this giant type tetris puzzle just right. I suppose nothing would be more appropriate to conclude this readme with than [a recent fan re-recording of an unreleased Necrophagist song](https://www.youtube.com/watch?v=Gkh33uVlST0).
