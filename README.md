@@ -178,10 +178,4 @@ The parameter `f` denotes a fraction standing in for the maximum `s` value of th
 
 ## Credits 
 
-The core of this library was largely written over the course of a single day with some minor follow-up additions in terms of dynamics modifiers, better type errors, et cetera. In closing I would like to pay homage to Necrophagist, '92 - '09, for supplying me with some sick nostalgic tunes to work against while getting this giant type tetris puzzle just right. I suppose nothing would be more appropriate to conclude this readme with than a recent fan re-recording of an unreleased Necrophagist song, only ever played live just a few months before the band became inactive (clickable link!).
-
-<center>
-
-[![](http://img.youtube.com/vi/Gkh33uVlST0/0.jpg)](http://www.youtube.com/watch?v=Gkh33uVlST0 "Necrophagist - Dawn and Demise (Covered by Peripheral Cortex)")
-
-</center>
+The core of this library was largely written over the course of a single day with some minor follow-up additions in terms of dynamics modifiers, better type errors, et cetera. In closing I would like to pay homage to Necrophagist, '92 - '09, for supplying me with some nostalgic tunes to work against while getting this giant type tetris puzzle just right. I suppose nothing would be more appropriate to conclude this readme with than [a recent fan re-recording of an unreleased Necrophagist song](https://www.youtube.com/watch?v=Gkh33uVlST0).
