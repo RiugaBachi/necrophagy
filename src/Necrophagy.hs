@@ -33,9 +33,9 @@ module Necrophagy (
   -- * Tuning
   Note(..),
   Tuning,
-  -- ** Tunings
-  EStandard6(..), 
-  DStandard6(..),
+  -- ** Common Tunings
+  EStandard, 
+  DStandard,
   -- * Notes
   On,
   -- ** Combinators
@@ -123,7 +123,13 @@ data TabMeta
 data TrackList = forall v c. TrackList [Track v c]
 
 data Program u
-  = Tuned Instrument u
+  = Program
+
+data Stringed (n :: Nat) (i :: Instrument)
+infixl 4 `Stringed`
+
+data Tuned i' u
+infixl 3 `Tuned`
 
 data TimeStrictness
   = Strict
@@ -134,7 +140,10 @@ type family TrackTag (o :: TimeStrictness) c :: Type where
   TrackTag 'Flexible _ = Void
 
 data Track (r :: TimeStrictness) c where
-  Track :: forall r p u m m' s s' t t' c. (u ~ Tuning p)
+  Track :: forall r n i v p u m m' s s' t t' c. 
+            ( p ~ (n `Stringed` i `Tuned` v)
+            , u ~ Tuning p n
+            )
         => { trackName    :: T.Text
            , trackProgram :: Program p
            , trackBody    :: Composition m m' s s' t t' u c
@@ -342,11 +351,11 @@ infixr 1 >
 
 -- * Guitar tunings
 
-type family Tuning a = u | u -> a
+type family Tuning p (n :: Nat) = u | u -> p n
 
-data EStandard6 = EStandard6
+data EStandard
 
-type instance Tuning EStandard6
+type instance Tuning EStandard 6
   = 'E @2
   > 'A @3
   > 'D @3
@@ -354,9 +363,9 @@ type instance Tuning EStandard6
   > 'B @4
   > 'E @4
 
-data DStandard6 = DStandard6
+data DStandard
 
-type instance Tuning DStandard6
+type instance Tuning DStandard 6
   = 'D @2 
   > 'G @2 
   > 'C @3 
