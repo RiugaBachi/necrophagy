@@ -22,7 +22,7 @@ stabwound = Tablature meta tracks
     tracks = TrackList @Flexible
       [ Track 
           { trackName    = "Rhythm Guitar - Muhammed Suicmez"
-          , trackProgram = DistortionGuitar `Tuned` DStandard6 
+          , trackProgram = DistortionGuitar `Tuned` DStandard @6
           , trackBody    = suicmez
           }
       ]

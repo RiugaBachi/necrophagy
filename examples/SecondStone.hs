@@ -22,7 +22,7 @@ secondStone = Tablature meta tracks
     tracks = TrackList @Flexible
       [ Track
           { trackName    = "Rhythm Guitar 1"
-          , trackProgram = DistortionGuitar `Tuned` EStandard6
+          , trackProgram = DistortionGuitar `Tuned` EStandard @6
           , trackBody    = rhythmGuitar1
           }
       ]
