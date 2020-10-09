@@ -180,7 +180,7 @@ The parameter `f` denotes a fraction standing in for the maximum `s` value of th
 
 A 'program' in the context of Necrophagy refers to a tuned instrument, as per MIDI terminology. Programs are constructed via the `Tuned :: Instrument -> p -> Program p` constructor, where `Instrument` is any valid MIDI instrument (re-exported from the `midi` package).
 
-`p` refers to a tuning name. All tuning names have the kind `Nat -> Type`; in other words, they are parameterized over a string count. Each _specialized_ tuning name against a string count may have a `Tuning` instance, which is a poly-kinded list of notes, each specialized to a particular octave number. Notes are defined by the following lifted data declaration:
+`p` refers to a specialized tuning name. All tuning names have the kind `Nat -> Type`; in other words, they are parameterized over a string count. Each _specialized_ tuning name against a string count may have a `Tuning` instance, which is a poly-kinded list of notes, each specialized to a particular octave number. Notes are defined by the following lifted data declaration:
 
 ```hs
 data Note (n :: Nat)
