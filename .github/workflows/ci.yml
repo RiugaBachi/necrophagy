@@ -19,6 +19,7 @@ jobs:
     steps:
     - name: Install dependencies
       run: sudo apt-get install libasound2-dev
+
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
 
