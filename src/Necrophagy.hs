@@ -21,6 +21,10 @@ module Necrophagy (
   -- * Compositions
   Composition(..),
   type (/),
+  -- ** Playback
+  play, at, fret,
+  -- ** Export
+  exportMidi,
   -- * Measures
   Measure(..),
   (#),
@@ -29,13 +33,14 @@ module Necrophagy (
   type (>),
   -- * Durations
   NoteDurations,
-  T, P, P', Q, 
+  T, T', P, P', Q, 
   -- * Tuning
   Note(..),
   Tuning,
   -- ** Common Tunings
   EStandard(..), 
   DStandard(..),
+  DropAb(..),
   -- * Notes
   On,
   -- ** Combinators
@@ -51,6 +56,7 @@ module Necrophagy (
   GraceDynamic(..),
   PM, LR, Vb, Lg, Gh, Sl, Gr, Bd,
   NH, AH, SH, TH,
+  Sk,
   type (^),
   type (//), type (///), type (////),
   type (\\), type (\\\), type (\\\\),
@@ -75,25 +81,41 @@ module Necrophagy (
   Gcd, Simplified,
   -- * Re-exports
   Nat,
-  (>>), ($), undefined, mempty,
+  (>>), ($), (.),
+  undefined,
+  mempty,
   fromString,
-  Instrument(..)
+  fromInteger,
+  InstrumentName(..)
 ) where
 
-import Prelude ( ($)
+import Prelude ( ($), const
+               , Fractional, Double
+               , String
                , Maybe(..), Bool(..), Ordering(..)
-               , undefined, mempty
-               , IO
+               , undefined, mempty 
+               , fromIntegral, fromInteger
+               , otherwise
+               , realToFrac, fromRational
+               , IO, putStrLn, pure
                )
+import qualified Prelude
+import Control.Concurrent
+import Control.Arrow
+import Control.Category ((.), id)
+import Control.Monad hiding ((>>))
 import Data.Void
+import Data.Singletons hiding (Apply)
+import Data.Monoid
 import Data.Type.Equality
 import Data.Type.Bool
 import qualified Data.Text as T
 import Data.String
 import Data.Kind
-import Sound.MIDI.General (Instrument(..))
-import GHC.TypeLits ( Nat
-                    , Symbol
+import Euterpea hiding (PitchClass(..), Text, Marker, Tempo, play)
+import qualified Euterpea as E
+import GHC.TypeLits ( Nat, KnownNat, natVal
+                    , Symbol, KnownSymbol, symbolVal
                     , Log2, Mod
                     , CmpNat
                     , TypeError, ErrorMessage(..)
@@ -124,7 +146,7 @@ data TabMeta
 data TrackList = forall v c. TrackList [Track v c]
 
 data Program p
-  = Tuned Instrument p
+  = Tuned InstrumentName p
 
 data TimeStrictness
   = Strict
@@ -184,12 +206,9 @@ infixr 3 +?
 
 -- | Calculate notes needed to be held from previous sequences
 -- in an arpeggio
-type family Holds (hs :: [Nat]) (ss :: [Nat]) :: Maybe Type where
-  Holds '[] ss = 'Nothing
-  Holds (h ': hs) ss = 
-    If (h `Elem` ss) 
-      (Holds hs ss) 
-      ('Just (H `On` h +? Holds hs ss))
+type family Holds (held :: [Nat]) :: Maybe Type where
+  Holds '[] = 'Nothing
+  Holds (h ': hs) = ('Just (H `On` h +? Holds hs))
 
 -- | Maybe to List
 type family M2L (x :: Maybe k) :: [k] where
@@ -207,18 +226,18 @@ type family FStrings xs where
   FStrings (x + xs) = M2L (RString x) ::: FStrings xs
   FStrings x = M2L (RString x)
 
-type family Arpeggiate (hs :: [Nat]) (ss :: [Nat]) a where
-  Arpeggiate hs _ (x - xs) = 
-    Arpeggiate hs '[] x - Arpeggiate (FStrings x ::: hs) '[] xs
-  Arpeggiate hs ss (x `On` s + xs) = 
-    x `On` s + Arpeggiate (s ': hs) (s ': ss) xs
-  Arpeggiate hs ss (x `On` s) = 
-    x `On` s +? Holds (s ': hs) (s ': ss)
-  Arpeggiate _ _ _ = TypeError 
+type family Arpeggiate (held :: [Nat]) a where
+  --Arpeggiate hs _ (x - xs) = 
+  --  Arpeggiate hs '[] x - Arpeggiate (FStrings x ::: hs) '[] xs
+  Arpeggiate held (x `On` s - xs) = 
+    (x `On` s +? Holds held) - Arpeggiate (s ': held) xs
+  Arpeggiate held (x `On` s) = 
+    x `On` s +? Holds held
+  Arpeggiate _ _ = TypeError 
     ('Text "Arpeggios must use chords with explicit `On` notation.")
 
 -- | Arpeggios
-type Arp a = Arpeggiate '[] '[] a
+type Arp a = Arpeggiate '[] a
 
 type family ExpandSeq (n :: Nat) a where
   ExpandSeq 1 xs = xs
@@ -349,10 +368,10 @@ data EStandard (n :: Nat) = EStandard
 
 type instance Tuning (EStandard 6)
   = 'E @2
-  > 'A @3
+  > 'A @2
   > 'D @3
   > 'G @3
-  > 'B @4
+  > 'B @3
   > 'E @4
 
 data DStandard (n :: Nat) = DStandard
@@ -362,8 +381,18 @@ type instance Tuning (DStandard 6)
   > 'G @2 
   > 'C @3 
   > 'F @3 
-  > 'A @4 
+  > 'A @3 
   > 'D @4
+
+data DropAb (n :: Nat) = DropAb
+
+type instance Tuning (DropAb 6)
+  = 'Ab @1
+  > 'Eb @2
+  > 'Ab @2
+  > 'Eb @3
+  > 'Ab @3
+  > 'Bb @3
 
 -- * Utilities
 
@@ -443,24 +472,25 @@ data Composition (m :: Symbol) (m' :: Symbol)
                   s             s' 
                  (t :: Nat)    (t' :: Nat) u c where
   Marker
-    :: forall (m' :: Symbol) m s t u. ()
+    :: forall (m' :: Symbol) m s t u. KnownSymbol m'
     => Composition m m' s s t t u (0 / 1)
   Tempo 
-    :: forall (t' :: Nat) t m s u. ()
+    :: forall (t' :: Nat) t m s u. KnownNat t'
     => Composition m m s s t t' u (0 / 1)
   Sig
     :: forall s' s (n :: Nat) (d :: Nat) m (t :: Nat) u.
-        ( s' ~ (n / d)
+        ( Fraction s' n d
         , NoteDenomination d
         )
     => Composition m m s s' t t u (0 / 1)
   Bar 
     :: forall m (n :: Nat) (d :: Nat) (t :: Nat) s u g o l. 
-        ( s ~ (n / d)
+        ( Fraction s n d
         , OutlineTotalsSignature s o
         , WellFormedGraph (KLength u) g
         , GraphFitsOutline o g
         , LyricsFitOutline o l 
+        , Musicalize u o g
         )
     => Measure o g l
     -> Composition m m s s t t u ((n `Mul` t) / (d `Mul` 4))
@@ -476,17 +506,19 @@ type NoteDenomination (n :: Nat) = (2 `Pow` Log2 n) ~ n
 
 -- | Triplets
 data T (v :: Nat)
+-- | Triplets (standalone)
+data T' (v :: Nat)
 -- | Quadruplets
 data Q (v :: Nat)
 -- | Pointed (single dotted) notes
-data P (v :: Nat)
+data P v
 -- | Extra-pointed (double dotted) notes
-data P' (v :: Nat)
+data P' v
 
-type family ExpandDotted (n :: Nat) (v :: Nat) where
-  ExpandDotted 0 v = (1 / v)
-  ExpandDotted n v = 
-    (1 / ((2 `Pow` n) `Mul` v)) ^+^ ExpandDotted (n `Sub` 1) v
+type family ExpandDotted (dots :: Nat) (n :: Nat) (d :: Nat) where
+  ExpandDotted 0    n d = (n / d)
+  ExpandDotted dots n d = 
+    (n / ((2 `Pow` dots) `Mul` d)) ^+^ ExpandDotted (dots `Sub` 1) n d
 
 type family NoteDurations (v :: k) = (a :: [Type])
 
@@ -497,12 +529,18 @@ type instance NoteDurations (v :: Nat)
   = '[1 / v]
 type instance NoteDurations (T (v :: Nat)) 
   = Repl 3 (2 / (3 `Mul` v))
+type instance NoteDurations (T' (v :: Nat)) 
+  = '[2 / (3 `Mul` v)]
 type instance NoteDurations (Q (v :: Nat)) 
   = Repl 4 (1 / v)
 type instance NoteDurations (P (v :: Nat)) 
-  = '[ExpandDotted 1 v]
+  = '[ExpandDotted 1 1 v]
+type instance NoteDurations (P (T' v))
+  = '[ExpandDotted 1 2 (3 `Mul` v)]
 type instance NoteDurations (P' (v :: Nat)) 
-  = '[ExpandDotted 2 v]
+  = '[ExpandDotted 2 1 v]
+type instance NoteDurations (P' (T' v))
+  = '[ExpandDotted 2 2 (3 `Mul` v)]
 
 -- | Measure 
 --
@@ -616,6 +654,10 @@ type instance ParseGraph r H
 -- | Pluck (single note)
 type instance ParseGraph r (n :: Nat) 
   = '[n `On` r]
+-- | Pluck (single note) (explicit string)
+type instance ParseGraph r (n `On` s)
+  = '[n `On` s]
+
 
 -- ** Combinator instances
 
@@ -637,6 +679,9 @@ type family Head (xs :: [k]) where
 
 type instance ParseGraph r (x * xs)
   = '[Head (ParseGraph r x) + Head (ParseGraph (r `Add` 1) xs)]
+
+type instance ParseGraph r ((x `On` s) + xs)
+  = '[(x `On` s) + Head (ParseGraph r xs)]
 
 -- ** Stock modifier instances
 
@@ -679,3 +724,157 @@ type instance ParseGraph r (Gr d m n xs)
 
 (>>) = Compose
 infixr 1 >>
+
+-- * Music conversion
+
+div :: Fractional a => a -> a -> a
+div = (Prelude./)
+
+duration :: forall f n d. Fraction f n d => Proxy f -> Dur
+duration _ = realToFrac (natVal (Proxy @n)) `div` realToFrac (natVal (Proxy @d))
+
+type family NoteIndex (n :: Nat) (xs :: k) :: SomeNote where
+  NoteIndex 1 ((x :: Note _) > _) = 'SomeNote x
+  NoteIndex 1 (x :: Note _) = 'SomeNote x
+  NoteIndex n (_ > xs) = NoteIndex (n `Sub` 1) xs
+
+data SomeNote = forall (o :: Nat). SomeNote (Note o)
+
+type family HalfStepsFrom (f :: Nat) (n :: SomeNote) :: SomeNote where
+  0 `HalfStepsFrom`  n                          = n
+  n `HalfStepsFrom` ('SomeNote ('Ab :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('A  @o)
+  n `HalfStepsFrom` ('SomeNote ('A  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('Bb @o)
+  n `HalfStepsFrom` ('SomeNote ('Bb :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('B  @o)
+  n `HalfStepsFrom` ('SomeNote ('B  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('C  @(o `Add` 1))
+  n `HalfStepsFrom` ('SomeNote ('C  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('Db @o)
+  n `HalfStepsFrom` ('SomeNote ('Db :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('D  @o)
+  n `HalfStepsFrom` ('SomeNote ('D  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('Eb @o)
+  n `HalfStepsFrom` ('SomeNote ('Eb :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('E  @o)
+  n `HalfStepsFrom` ('SomeNote ('E  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('F  @o)
+  n `HalfStepsFrom` ('SomeNote ('F  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('Gb @o)
+  n `HalfStepsFrom` ('SomeNote ('Gb :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('G  @o)
+  n `HalfStepsFrom` ('SomeNote ('G  :: Note o)) = (n `Sub` 1) `HalfStepsFrom` 'SomeNote ('Ab @o)
+
+type LookupNote u (f :: Nat) (s :: Nat) 
+  = f `HalfStepsFrom` NoteIndex s u
+
+class ToPitch (n :: SomeNote) where
+  toPitch :: Proxy n -> Pitch
+
+instance KnownNat o => ToPitch ('SomeNote ('Ab :: Note o)) where 
+  toPitch _ = (E.Af, fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('A  :: Note o)) where 
+  toPitch _ = (E.A,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('Bb :: Note o)) where 
+  toPitch _ = (E.Bf, fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('B  :: Note o)) where 
+  toPitch _ = (E.B,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('C  :: Note o)) where 
+  toPitch _ = (E.C,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('Db :: Note o)) where 
+  toPitch _ = (E.Df, fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('D  :: Note o)) where 
+  toPitch _ = (E.D,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('Eb :: Note o)) where 
+  toPitch _ = (E.Ef, fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('E  :: Note o)) where 
+  toPitch _ = (E.E,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('F  :: Note o)) where 
+  toPitch _ = (E.F,  fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('Gb :: Note o)) where 
+  toPitch _ = (E.Gf, fromIntegral $ natVal (Proxy @o))
+instance KnownNat o => ToPitch ('SomeNote ('G  :: Note o)) where 
+  toPitch _ = (E.G, fromIntegral $ natVal (Proxy @o))
+
+type family FractionList n d (ts :: [Type]) :: Constraint where
+  FractionList n d '[] = ()
+  FractionList n d (x ': _) = x ~ (n / d)
+
+type Fraction t n d
+  = ( t ~ (n / d)
+    , KnownNat n
+    , KnownNat d
+    )
+
+exportMidi :: String -> Composition m m' s s' t t' u c -> IO ()
+exportMidi file = writeMidi file . Modify (E.Instrument OverdrivenGuitar) . line . composeSlices
+
+play :: Composition m m' s s' t t' u c -> IO ()
+play = playDev 2 . Modify (E.Instrument OverdrivenGuitar) . line . composeSlices
+
+at :: String -> Composition m m' s s' t t' u c -> IO ()
+at marker (x `Compose` xs)
+  | sameMarker marker x = playDev 2 $ Modify (E.Tempo 1.75) $ line $ composeSlices xs
+  | otherwise = at marker xs
+at marker m@Marker = when (sameMarker marker m) $ putStrLn "Empty section."
+at _ _ = putStrLn "Marker not found."
+
+fret 
+  :: forall position tuningId tuning note fret string. 
+      ( position ~ fret `On` string
+      , tuning ~ Tuning tuningId
+      , note ~ LookupNote tuning fret string
+      , ToPitch note
+      ) 
+  => IO ()
+fret = void . forkIO . playDev 2 . Modify (E.Instrument OverdrivenGuitar) . line . pure $ musicalize (Proxy @tuning) (Proxy @'[(1/2)]) (Proxy @'[(fret `On` string)])
+
+sameMarker 
+  :: forall m m' s s' t t' u c. ()
+  => String
+  -> Composition m m' s s' t t' u c 
+  -> Bool
+sameMarker marker Marker = marker Prelude.== symbolVal (Proxy @m')
+sameMarker _ _ = False
+
+composeSlices :: forall m m' s s' t t' u c. Composition m m' s s' t t' u c -> [Music Pitch]
+composeSlices (x `Compose` xs) = go x xs
+  where
+    go :: forall q w e j l. ()
+       => Composition m q s w t e u j 
+       -> Composition q m' w s' e t' u l 
+       -> [Music Pitch]
+    go Tempo rs = pure . Modify (E.Tempo . (`div` 120) . fromIntegral . natVal $ Proxy @e) $ line (composeSlices rs)
+    go l     rs = composeSlices l <> composeSlices rs
+composeSlices (Bar (_ :: Measure o g l)) = [musicalize (Proxy @u) (Proxy @o) (Proxy @g)]
+composeSlices _ = [Prim (Rest 0)]
+
+class Musicalize u (ts :: [Type]) (vs :: [Type]) where
+  musicalize :: Proxy u -> Proxy ts -> Proxy vs -> Music Pitch
+
+instance Musicalize u '[] '[] where
+  musicalize _ _ _ = Prim (Rest 0)
+
+instance ( GraphUnit u t v
+         , Musicalize u ts vs
+         , Fraction t n d 
+         ) => Musicalize u (t ': ts) (v ': vs) where
+  musicalize _ _ _  =  graphUnit  (Proxy @u) (Proxy @t)  (Proxy @v) 
+                   :+: musicalize (Proxy @u) (Proxy @ts) (Proxy @vs)
+
+-- | Parsing of graph units, i.e. @f `On` s@ elements.
+class GraphUnit u t f where
+  graphUnit :: Proxy u -> Proxy t -> Proxy f -> Music Pitch
+
+instance ( ToPitch l
+         , l ~ LookupNote u f s
+         , Fraction t n d
+         ) => GraphUnit u t ((f :: Nat) `On` (s :: Nat)) where
+  graphUnit _ _ _ = note (duration (Proxy @t)) . toPitch $ Proxy @l
+
+instance {-# OVERLAPPING #-} Fraction t n d => GraphUnit u t (H `On` s) where
+  graphUnit _ _ _ = rest . duration $ Proxy @(0/1)
+
+instance {-# OVERLAPPING #-} Fraction t n d => GraphUnit u t (M `On` s) where
+  graphUnit _ _ _ = rest . duration $ Proxy @t
+
+instance {-# OVERLAPPING #-} Fraction t n d => GraphUnit u t (X `On` s) where
+  graphUnit _ _ _ = rest . duration $ Proxy @t
+
+instance {-# OVERLAPPABLE #-} GraphUnit u t s => GraphUnit u t ((m :: k -> Type) s) where
+  graphUnit _ _ _ = graphUnit (Proxy @u) (Proxy @t) (Proxy @s)
+
+instance {-# OVERLAPS #-} (GraphUnit u t x, GraphUnit u t xs) => GraphUnit u t (x + xs) where
+  graphUnit _ _ _ =  graphUnit (Proxy @u) (Proxy @t) (Proxy @x) 
+                 :=: graphUnit (Proxy @u) (Proxy @t) (Proxy @xs)
+
