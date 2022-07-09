@@ -4,6 +4,8 @@
   PartialTypeSignatures, NoStarIsType
 #-}
 
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+
 module SecondStone where
 
 import Necrophagy
