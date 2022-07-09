@@ -14,9 +14,14 @@ A type-level, statically-verified Haskell embedded domain specific language (EDS
 
 Named in honor of Necrophagist, the pioneers of modern technical death metal. The music is already technical, what's a little bit of hardcore type-level programming to phase us?
 
-Currently, this library only provides the type-level facilities needed to describe guitar tablature spanning multiple tracks at the type level. Future goals include GP5, MIDI, and WAV backends to make these tabs more useful beyond direct reading.
+Currently, this library provides:
+- Structure: all the facilities needed to describe guitar tablature spanning multiple tracks at the type level.
+- Playback: via midi to device 2; some dynamics have not been implemented yet sound-wise.
+- Exporting: to midi, which can in turn be baked with a soundfont into a wav, ogg, etc. using your favorite software.
+  
+Future goals include GP5 import/export to make these tabs mesh better with the existing tablature ecosystem.
 
-Transcription workflow is heavily designed around GHCi. Once MIDI / GP5 support is implemented, workflow-related functions for delimited section playback and tab file generation will be added with the intent that they be invoked from GHCi sessions interpreting individual tablature source files.
+Transcription workflow is heavily designed around GHCi / `cabal repl`.
 
 ## Try it out
 
@@ -79,6 +84,23 @@ myTrack = do
 >> ghci MyTab.hs
 Tab> :t myTrack
 Tab> myTab 
+```
+
+For audio playback via midi, the following functions are provided:
+
+```
+Tab> play track -- Plays the specified track from the beginning; Ctrl+C to halt
+Tab> at "Marker name" track -- Plays the track starting at specified marker; errors if marker does not exist
+Tab> fret @(fretNumber `On` stringNumber) @(tuning) 
+Tab> -- ^ Plays the specified note on the specified string; useful while tabbing a song out
+Tab> -- Example: fret @(17 `On` 6) @(DStandard 6)
+Tab> -- Note: You may need to :set -XTypeApplications -XTypeOperators -xDataKinds for this
+```
+
+You can also conveniently export via the following:
+
+```
+Tab> exportMidi "file.wav" track
 ```
 
 ## Documentation
