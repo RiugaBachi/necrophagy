@@ -88,7 +88,7 @@ Tab> myTab
 
 For audio playback via midi, the following functions are provided:
 
-```
+```hs
 Tab> play track -- Plays the specified track from the beginning; Ctrl+C to halt
 Tab> at "Marker name" track -- Plays the track starting at specified marker; errors if marker does not exist
 Tab> fret @(fretNumber `On` stringNumber) @(tuning) 
@@ -99,7 +99,7 @@ Tab> -- Note: You may need to :set -XTypeApplications -XTypeOperators -xDataKind
 
 You can also conveniently export via the following:
 
-```
+```hs
 Tab> exportMidi "file.wav" track
 ```
 
