@@ -100,7 +100,7 @@ Tab> -- Note: You may need to :set -XTypeApplications -XTypeOperators -xDataKind
 You can also conveniently export via the following:
 
 ```hs
-Tab> exportMidi "file.wav" track
+Tab> exportMidi "file.mid" track
 ```
 
 ## Documentation
